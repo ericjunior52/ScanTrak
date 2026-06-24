@@ -335,3 +335,88 @@ export function formatRelative(iso) {
   if (diff < 365) return `${Math.round(diff / 30)} months ago`;
   return `${Math.round(diff / 365)} year${diff < 730 ? '' : 's'} ago`;
 }
+
+/* ----------------------------------------------------------------
+ * buildExternalPatient(payload)
+ * ----------------------------------------------------------------
+ * Mints a fully-shaped patient object compatible with the existing
+ * PATIENTS[] array, from an external-upload payload produced by the
+ * ExternalUploadModal. The returned object:
+ *
+ *   - has the same schema as a PATIENTS[] entry
+ *   - is flagged `external: true` (used by Dashboard for the EXTERNAL
+ *     tag and by the rule engine to elevate severity to YELLOW)
+ *   - has history pre-seeded with ONE external prior scan so the new
+ *     row naturally renders as YELLOW (or higher) for demo punch
+ *   - does NOT mutate the existing PATIENTS array — pure factory
+ *
+ * Payload schema (mirrors ExternalUploadModal PRESETS):
+ *   {
+ *     kind:        'PDF' | 'QR',
+ *     facility:    string,
+ *     modality:    keyof MODALITIES,
+ *     bodyPart:    keyof BODY_PARTS,
+ *     patientId:   string,
+ *     patientName: string,
+ *     date:        ISO string,
+ *     indication:  string,
+ *   }
+ * ---------------------------------------------------------------- */
+let __externalReqCounter = 9000; // monotonically increasing REQ id source
+let __externalScanCounter = 7000; // monotonically increasing SCN id source
+
+export function buildExternalPatient(payload) {
+  if (!payload || typeof payload !== 'object') {
+    throw new Error('buildExternalPatient: payload is required');
+  }
+  const modality = payload.modality in MODALITIES ? payload.modality : 'XR';
+  const bodyPart = payload.bodyPart in BODY_PARTS ? payload.bodyPart : 'CHEST';
+  const facility = payload.facility || 'External Facility';
+
+  // Pre-seed an external prior scan so the row renders as YELLOW.
+  // The special-case in evaluateRequest() bumps any external prior to
+  // YELLOW regardless of modality/gap. We pick a date 45 days prior to
+  // TODAY (safe — outside the 30-day RED window) and use the same
+  // modality/bodyPart so the prior is also a "matched" prior.
+  const priorDate = daysAgo(45);
+
+  __externalReqCounter += 1;
+  __externalScanCounter += 1;
+
+  return {
+    id: payload.patientId,
+    name: payload.patientName,
+    // We don't have true DOB from the demo payload — fabricate a
+    // believable age based on a fixed reference so the UI shows a
+    // stable "Age" value across renders. 1970-01-01 gives ~56y today.
+    dob: '1970-01-01',
+    sex: 'F',
+    mrn: `MRN-${payload.patientId.replace(/^P-/, '')}-EXT`,
+    requestingPhysician: 'External Intake',
+    ward: `${facility} — EXTERNAL`,
+    external: true,
+    incomingRequest: {
+      id: `REQ-${__externalReqCounter}`,
+      modality,
+      bodyPart,
+      clinicalIndication: payload.indication,
+      priority: 'Urgent',
+      requestedAt: new Date().toISOString(),
+      contrast: 'No contrast',
+    },
+    history: [
+      {
+        id: `SCN-EXT-${__externalScanCounter}`,
+        date: priorDate,
+        modality,
+        bodyPart,
+        facility: `${facility} — EXTERNAL`,
+        indication: 'Imported from external record.',
+        findings: 'External report ingested via ScanTrack gateway.',
+        effectiveDose: 0.05,
+        radiologist: 'External Radiologist',
+        external: true,
+      },
+    ],
+  };
+}

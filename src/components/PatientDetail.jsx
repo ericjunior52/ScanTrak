@@ -4,10 +4,13 @@ import {
   AlertTriangle,
   ArrowLeft,
   CheckCircle2,
+  CheckSquare,
   Database,
   ExternalLink,
   FileSignature,
   FileText,
+  Flag,
+  FolderOpen,
   Hospital,
   Phone,
   Save,
@@ -17,6 +20,7 @@ import {
 } from 'lucide-react';
 import { SEVERITY_META } from './severity';
 import { SeverityBadge } from './Badges';
+import { useAuditLog } from './AuditLogContext';
 import {
   BODY_PARTS,
   MODALITIES,
@@ -75,6 +79,8 @@ export default function PatientDetail({
   isResolved = false,
   resolvedAt = null,
 }) {
+  const { logEvent } = useAuditLog();
+
   const patient = useMemo(
     () => PATIENTS.find((p) => p.id === patientId),
     [patientId],
@@ -230,6 +236,9 @@ export default function PatientDetail({
               justificationError={justificationError}
               submitting={submitting}
               onSubmit={handleSubmit}
+              logEvent={logEvent}
+              patient={patient}
+              prior={evalResult.matchedPrior[0]}
             />
           )}
         </div>
@@ -640,7 +649,39 @@ function AuditDocumentationCard({
   justificationError,
   submitting,
   onSubmit,
+  logEvent,
+  patient,
+  prior,
 }) {
+  // Lightweight inline confirmation. We track which action just fired
+  // and clear it after ~1.6s. Two flags because the user can fire each
+  // button independently within the toast window.
+  const [confirmFlag, setConfirmFlag] = useState(false);
+  const [confirmPrior, setConfirmPrior] = useState(false);
+
+  const handleFlagCommittee = () => {
+    logEvent({
+      type: 'FLAG_COMMITTEE',
+      severity: 'WARN',
+      actor: 'Dr. A. Mercer',
+      message: `Dr. Mercer flagged Patient ${patient.id} (${patient.name}) as 'Refer to radiology committee for review'.`,
+    });
+    setConfirmFlag(true);
+    window.setTimeout(() => setConfirmFlag(false), 1600);
+  };
+
+  const handleOpenPrior = () => {
+    if (!prior) return; // disabled state guard
+    logEvent({
+      type: 'OPEN_PRIOR_REPORT',
+      severity: 'INFO',
+      actor: 'Dr. A. Mercer',
+      message: `Dr. Mercer opened prior imaging report ${prior.id} for Patient ${patient.id}.`,
+    });
+    setConfirmPrior(true);
+    window.setTimeout(() => setConfirmPrior(false), 1600);
+  };
+
   return (
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       <header className="flex items-center gap-2 border-b border-slate-200 px-5 py-4">
@@ -698,6 +739,56 @@ function AuditDocumentationCard({
             </p>
           )}
         </div>
+
+        {/* ---- Tertiary action row (audit-log only, non-destructive) ---- */}
+        <div className="space-y-2 border-t border-slate-100 pt-4">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+            Quick Actions
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleFlagCommittee}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 shadow-sm hover:bg-amber-100"
+            >
+              <Flag className="h-3.5 w-3.5" />
+              Flag for radiology committee
+              {confirmFlag && (
+                <CheckSquare className="h-3.5 w-3.5 text-emerald-600" />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={handleOpenPrior}
+              disabled={!prior}
+              title={prior ? 'Open prior imaging report' : 'No prior imaging on file'}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <FolderOpen className="h-3.5 w-3.5" />
+              Open prior imaging report
+              {confirmPrior && (
+                <CheckSquare className="h-3.5 w-3.5 text-emerald-600" />
+              )}
+            </button>
+            {confirmFlag && (
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700">
+                Logged ✓
+              </span>
+            )}
+            {confirmPrior && (
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700">
+                Logged ✓
+              </span>
+            )}
+          </div>
+          {!prior && (
+            <p className="text-[11px] text-slate-400">
+              No prior imaging on file — the “Open prior imaging report” action
+              is disabled.
+            </p>
+          )}
+        </div>
+
         <button
           type="submit"
           disabled={submitting}

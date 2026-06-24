@@ -4,6 +4,7 @@ import { SEVERITY_META } from './severity';
 export function SeverityBadge({ severity, size = 'sm', className = '' }) {
   const meta = SEVERITY_META[severity] || SEVERITY_META.GREEN;
   const Icon = meta.icon;
+  const isRed = severity === 'RED';
   const sizes = {
     sm: 'text-xs px-2 py-0.5 gap-1',
     md: 'text-sm px-2.5 py-1 gap-1.5',
@@ -11,7 +12,7 @@ export function SeverityBadge({ severity, size = 'sm', className = '' }) {
   };
   return (
     <span
-      className={`inline-flex items-center rounded-full font-semibold ${meta.badge} ${sizes[size]} ${className}`}
+      className={`inline-flex items-center rounded-full font-semibold ${meta.badge} ${sizes[size]} ${isRed ? 'animate-pulse-red' : ''} ${className}`}
     >
       <Icon className={size === 'sm' ? 'h-3 w-3' : size === 'md' ? 'h-4 w-4' : 'h-5 w-5'} />
       {meta.label}

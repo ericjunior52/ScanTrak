@@ -16,9 +16,14 @@ import {
   TrendingUp,
   User,
   Users,
+  UploadCloud,
   Waves,
 } from 'lucide-react';
 import { SeverityBadge, SeverityDot } from './Badges';
+import { buildExternalPatient } from '../data';
+import { useAuditLog } from './AuditLogContext';
+import ExternalUploadModal from './ExternalUploadModal';
+import AuditLog from './AuditLog';
 import {
   BODY_PARTS,
   MODALITIES,
@@ -55,16 +60,28 @@ function ModalityIcon({ modality, className = 'h-4 w-4' }) {
 
 const SEVERITY_ORDER = { RED: 0, YELLOW: 1, GREY: 2, GREEN: 3 };
 
-export default function Dashboard({ onSelectPatient, resolvedIds }) {
+export default function Dashboard({ onSelectPatient, resolvedIds, auditLog }) {
   const [query, setQuery] = useState('');
   const [severityFilter, setSeverityFilter] = useState('ALL');
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  // Extra (external) patients added at runtime via the Simulate External
+  // Upload modal. Held in component state (not App-level reducer) because
+  // they're presentation-only demo artefacts. Newest-first ordering — the
+  // modal handler prepends, so we just spread.
+  const [extraPatients, setExtraPatients] = useState([]);
+  const { logEvent } = useAuditLog();
+
+  const allPatients = useMemo(
+    () => [...extraPatients, ...PATIENTS],
+    [extraPatients],
+  );
 
   const rows = useMemo(() => {
-    return PATIENTS.map((p) => {
+    return allPatients.map((p) => {
       const evalResult = evaluateRequest(p);
       return { patient: p, eval: evalResult };
     }).sort((a, b) => SEVERITY_ORDER[a.eval.severity] - SEVERITY_ORDER[b.eval.severity]);
-  }, []);
+  }, [allPatients]);
 
   const filtered = rows.filter(({ patient, eval: ev }) => {
     if (severityFilter !== 'ALL' && ev.severity !== severityFilter) return false;
@@ -95,6 +112,21 @@ export default function Dashboard({ onSelectPatient, resolvedIds }) {
     return { total, flagged, red, yellow };
   }, [rows]);
 
+  // Confirm handler for the external upload modal. Adds the new patient
+  // to the top of the list (so it renders as the first row) and emits
+  // a SUCCESS audit-log entry.
+  const handleExternalConfirm = (payload) => {
+    const patient = buildExternalPatient(payload);
+    setExtraPatients((prev) => [patient, ...prev]);
+    logEvent({
+      type: 'EXTERNAL_UPLOAD',
+      severity: 'SUCCESS',
+      actor: 'External Gateway',
+      message: `External ${payload.kind} ingested from ${payload.facility} for Patient ${payload.patientId} (${payload.patientName}).`,
+    });
+    setShowUploadModal(false);
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -123,6 +155,13 @@ export default function Dashboard({ onSelectPatient, resolvedIds }) {
         </div>
 
         <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setShowUploadModal(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700 shadow-sm hover:bg-indigo-100"
+          >
+            <UploadCloud className="h-4 w-4" />
+            Simulate External Upload
+          </button>
           <button className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">
             <Filter className="h-4 w-4" />
             Advanced Filters
@@ -242,8 +281,17 @@ export default function Dashboard({ onSelectPatient, resolvedIds }) {
                       <div className="flex items-center gap-3">
                         <Avatar name={patient.name} />
                         <div>
-                          <div className="font-semibold text-slate-900">
-                            {patient.name}
+                          <div className="flex items-center gap-1.5 font-semibold text-slate-900">
+                            <span>{patient.name}</span>
+                            {patient.external && (
+                              <span
+                                title="Ingested from external facility"
+                                className="inline-flex items-center gap-1 rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-indigo-700 ring-1 ring-indigo-200"
+                              >
+                                <ExternalLink className="h-3 w-3" />
+                                External
+                              </span>
+                            )}
                           </div>
                           <div className="text-xs text-slate-500">
                             {patient.id} · {ageFromDob(patient.dob)}y · {patient.sex}
@@ -360,6 +408,16 @@ export default function Dashboard({ onSelectPatient, resolvedIds }) {
           </span>
         </div>
       </div>
+
+      {/* Live Audit Log stream — sticky to the bottom of the dashboard column */}
+      <AuditLog entries={auditLog ?? []} />
+
+      {/* Simulate External Upload modal */}
+      <ExternalUploadModal
+        open={showUploadModal}
+        onClose={() => setShowUploadModal(false)}
+        onConfirm={handleExternalConfirm}
+      />
     </div>
   );
 }
