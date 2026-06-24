@@ -1,4 +1,4 @@
-import { useReducer, useState } from 'react';
+import { useMemo, useReducer, useState } from 'react';
 import {
   ArrowLeft,
   LayoutDashboard,
@@ -22,19 +22,43 @@ import { GdprBadge } from './components/Badges';
  *   - NAVIGATE_DASHBOARD : go to dashboard (clears active patient)
  *   - OPEN_PATIENT       : go to detail for a specific patientId
  *   - BACK               : return to dashboard (alias for NAVIGATE_DASHBOARD)
+ *   - RESOLVE_PATIENT    : record that a patient has been resolved
+ *                          (audit-logged) and return to the dashboard.
+ *                          The `resolutions` map is intentionally
+ *                          preserved across BACK/NAVIGATE_DASHBOARD
+ *                          events so resolved patients remain marked
+ *                          in the dashboard for the whole session.
  * ---------------------------------------------------------------- */
 
-const initialState = { view: 'dashboard', activePatientId: null };
+const initialState = {
+  view: 'dashboard',
+  activePatientId: null,
+  resolutions: {},
+};
 
 function reducer(state, event) {
   switch (event.type) {
     case 'NAVIGATE_DASHBOARD':
-      return { view: 'dashboard', activePatientId: null };
+      return { ...state, view: 'dashboard', activePatientId: null };
     case 'BACK':
-      return { view: 'dashboard', activePatientId: null };
+      return { ...state, view: 'dashboard', activePatientId: null };
     case 'OPEN_PATIENT':
       if (!event.patientId) return state;
-      return { view: 'patient', activePatientId: event.patientId };
+      return { ...state, view: 'patient', activePatientId: event.patientId };
+    case 'RESOLVE_PATIENT': {
+      if (!event.patientId) return state;
+      return {
+        view: 'dashboard',
+        activePatientId: null,
+        resolutions: {
+          ...state.resolutions,
+          [event.patientId]: {
+            status: 'RESOLVED',
+            resolvedAt: new Date().toISOString(),
+          },
+        },
+      };
+    }
     default:
       return state;
   }
@@ -43,6 +67,14 @@ function reducer(state, event) {
 export default function App() {
   const [state, dispatch] = useReducer(reducer, initialState);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  // Set of patient IDs resolved in the current session. Memoised so the
+  // Dashboard does not re-render due to reference changes on unrelated
+  // state updates.
+  const resolvedIds = useMemo(
+    () => new Set(Object.keys(state.resolutions)),
+    [state.resolutions],
+  );
 
   const handleNavigate = (view) => {
     if (view === 'dashboard') {
@@ -57,6 +89,10 @@ export default function App() {
   };
 
   const handleBack = () => dispatch({ type: 'BACK' });
+
+  const handleResolve = (patientId) => {
+    dispatch({ type: 'RESOLVE_PATIENT', patientId });
+  };
 
   return (
     <div className="flex h-full min-h-screen bg-slate-100">
@@ -137,12 +173,26 @@ export default function App() {
         <div className="flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:px-8">
           <div className="mx-auto max-w-7xl">
             {state.view === 'dashboard' && (
-              <Dashboard onSelectPatient={handleSelectPatient} />
+              <Dashboard
+                onSelectPatient={handleSelectPatient}
+                resolvedIds={resolvedIds}
+              />
             )}
             {state.view === 'patient' && (
               <PatientDetail
                 patientId={state.activePatientId}
                 onBack={handleBack}
+                onResolve={handleResolve}
+                isResolved={
+                  state.activePatientId
+                    ? resolvedIds.has(state.activePatientId)
+                    : false
+                }
+                resolvedAt={
+                  state.activePatientId
+                    ? state.resolutions[state.activePatientId]?.resolvedAt ?? null
+                    : null
+                }
               />
             )}
           </div>

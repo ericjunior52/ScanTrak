@@ -5,6 +5,7 @@ import {
   Brain,
   Building2,
   Calendar,
+  CheckCircle2,
   ExternalLink,
   FileSearch,
   Filter,
@@ -54,7 +55,7 @@ function ModalityIcon({ modality, className = 'h-4 w-4' }) {
 
 const SEVERITY_ORDER = { RED: 0, YELLOW: 1, GREY: 2, GREEN: 3 };
 
-export default function Dashboard({ onSelectPatient }) {
+export default function Dashboard({ onSelectPatient, resolvedIds }) {
   const [query, setQuery] = useState('');
   const [severityFilter, setSeverityFilter] = useState('ALL');
 
@@ -77,6 +78,14 @@ export default function Dashboard({ onSelectPatient }) {
       BODY_PARTS[patient.incomingRequest.bodyPart].toLowerCase().includes(q)
     );
   });
+
+  const resolvedCount = useMemo(
+    () =>
+      resolvedIds
+        ? rows.filter(({ patient }) => resolvedIds.has(patient.id)).length
+        : 0,
+    [rows, resolvedIds]
+  );
 
   const stats = useMemo(() => {
     const total = rows.length;
@@ -204,18 +213,28 @@ export default function Dashboard({ onSelectPatient }) {
               {filtered.map(({ patient, eval: ev }) => {
                 const req = patient.incomingRequest;
                 const prior = ev.matchedPrior[0];
+                const isResolved = resolvedIds?.has(patient.id) ?? false;
                 return (
                   <tr
                     key={patient.id}
                     onClick={() => onSelectPatient(patient.id)}
-                    className="group cursor-pointer transition-colors hover:bg-sky-50/60"
+                    className={`group cursor-pointer transition-colors hover:bg-sky-50/60 ${
+                      isResolved ? 'opacity-70' : ''
+                    }`}
                   >
                     {/* Status */}
                     <td className="whitespace-nowrap px-4 py-3.5 align-top">
-                      <div className="flex items-center gap-2">
-                        <SeverityDot severity={ev.severity} className="h-2.5 w-2.5" />
-                        <SeverityBadge severity={ev.severity} />
-                      </div>
+                      {isResolved ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 ring-1 ring-emerald-200">
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          Resolved
+                        </span>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <SeverityDot severity={ev.severity} className="h-2.5 w-2.5" />
+                          <SeverityBadge severity={ev.severity} />
+                        </div>
+                      )}
                     </td>
 
                     {/* Patient */}
@@ -326,6 +345,14 @@ export default function Dashboard({ onSelectPatient }) {
           <span>
             Showing <span className="font-semibold text-slate-700">{filtered.length}</span>{' '}
             of <span className="font-semibold text-slate-700">{rows.length}</span> requests
+            {resolvedCount > 0 && (
+              <>
+                {' · '}
+                <span className="font-semibold text-emerald-700">
+                  {resolvedCount} resolved
+                </span>
+              </>
+            )}
           </span>
           <span className="inline-flex items-center gap-1.5">
             <Building2 className="h-3.5 w-3.5" />
