@@ -74,6 +74,7 @@ const OUTCOME_OPTIONS = [
  * ---------------------------------------------------------------- */
 export default function PatientDetail({
   patientId,
+  activeUser,
   onBack,
   onResolve,
   isResolved = false,
@@ -239,6 +240,7 @@ export default function PatientDetail({
               logEvent={logEvent}
               patient={patient}
               prior={evalResult.matchedPrior[0]}
+              activeUser={activeUser}
             />
           )}
         </div>
@@ -652,6 +654,7 @@ function AuditDocumentationCard({
   logEvent,
   patient,
   prior,
+  activeUser,
 }) {
   // Lightweight inline confirmation. We track which action just fired
   // and clear it after ~1.6s. Two flags because the user can fire each
@@ -663,8 +666,8 @@ function AuditDocumentationCard({
     logEvent({
       type: 'FLAG_COMMITTEE',
       severity: 'WARN',
-      actor: 'Dr. A. Mercer',
-      message: `Dr. Mercer flagged Patient ${patient.id} (${patient.name}) as 'Refer to radiology committee for review'.`,
+      actor: `${activeUser.name} (${activeUser.role})`,
+      message: `${activeUser.name} flagged Patient ${patient.id} (${patient.name}) as 'Refer to radiology committee for review'.`,
     });
     setConfirmFlag(true);
     window.setTimeout(() => setConfirmFlag(false), 1600);
@@ -675,8 +678,8 @@ function AuditDocumentationCard({
     logEvent({
       type: 'OPEN_PRIOR_REPORT',
       severity: 'INFO',
-      actor: 'Dr. A. Mercer',
-      message: `Dr. Mercer opened prior imaging report ${prior.id} for Patient ${patient.id}.`,
+      actor: `${activeUser.name} (${activeUser.role})`,
+      message: `${activeUser.name} opened prior imaging report ${prior.id} for Patient ${patient.id}.`,
     });
     setConfirmPrior(true);
     window.setTimeout(() => setConfirmPrior(false), 1600);

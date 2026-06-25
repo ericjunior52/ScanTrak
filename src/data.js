@@ -1,3 +1,24 @@
+// --- Demo user registry (TSK-01) ---
+export const DEMO_USERS = [
+  { userId: 'mercer.rad', name: 'Dr. Alex Mercer', role: 'Radiologist' },
+  { userId: 'tech.smith', name: 'Sarah Smith', role: 'Radiographer' },
+  { userId: 'admin.jones', name: 'Michael Jones', role: 'System Administrator' },
+];
+
+const DEMO_PASSWORDS = {
+  'mercer.rad': 'password',
+  'tech.smith': 'password',
+  'admin.jones': 'password',
+};
+
+export function findUser(username, password) {
+  if (!username || !password) return null;
+  const user = DEMO_USERS.find((u) => u.userId === username.trim());
+  if (!user) return null;
+  if (DEMO_PASSWORDS[user.userId] !== password) return null;
+  return user;
+}
+
 // Mock dataset for ScanTrack
 // Today is treated as 2026-06-23 for relative-date display purposes.
 

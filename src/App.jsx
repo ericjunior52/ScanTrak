@@ -2,6 +2,7 @@ import { useCallback, useMemo, useReducer, useState } from 'react';
 import {
   ArrowLeft,
   LayoutDashboard,
+  LogOut,
   Menu,
   ScanLine,
   X,
@@ -9,6 +10,7 @@ import {
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import PatientDetail from './components/PatientDetail';
+import LoginScreen from './components/LoginScreen';
 import { GdprBadge } from './components/Badges';
 import { AuditLogContext } from './components/AuditLogContext';
 import { PATIENTS } from './data';
@@ -51,6 +53,7 @@ const newId = () => {
 
 const initialState = {
   view: 'dashboard',
+  activeUser: null,
   activePatientId: null,
   resolutions: {},
   // auditLog: array of { id, ts (ISO), type, severity, actor, message }
@@ -62,6 +65,18 @@ const initialState = {
 
 function reducer(state, event) {
   switch (event.type) {
+    case 'LOGIN':
+      return {
+        ...state,
+        activeUser: event.user ?? null,
+        view: 'dashboard',
+        activePatientId: null,
+      };
+    case 'LOGOUT':
+      return {
+        ...initialState,
+        activeUser: null,
+      };
     case 'NAVIGATE_DASHBOARD':
       return { ...state, view: 'dashboard', activePatientId: null };
     case 'BACK':
@@ -124,6 +139,15 @@ export default function App() {
   // src/components/AuditLogContext.js for rationale.
   const auditCtxValue = useMemo(() => ({ logEvent }), [logEvent]);
 
+  const handleLogin = (user) => {
+    dispatch({ type: 'LOGIN', user });
+  };
+
+  const handleLogout = () => {
+    dispatch({ type: 'LOGOUT' });
+    setMobileNavOpen(false);
+  };
+
   const handleNavigate = (view) => {
     if (view === 'dashboard') {
       dispatch({ type: 'NAVIGATE_DASHBOARD' });
@@ -144,15 +168,25 @@ export default function App() {
     // log message can include the human-friendly name.
     dispatch({ type: 'RESOLVE_PATIENT', patientId });
     const patient = PATIENTS.find((p) => p.id === patientId);
-    if (patient) {
+    if (patient && state.activeUser) {
+      const actor = `${state.activeUser.name} (${state.activeUser.role})`;
       logEvent({
         type: 'RESOLVE',
         severity: 'SUCCESS',
-        actor: 'Dr. A. Mercer',
-        message: `Dr. Mercer resolved Patient ${patient.id} (${patient.name}).`,
+        actor,
+        message: `${state.activeUser.name} resolved Patient ${patient.id} (${patient.name}).`,
       });
     }
   };
+
+  // When no user is authenticated, render only the login screen. The
+  // dashboard, sidebar, and audit context are intentionally withheld until
+  // a successful LOGIN event populates state.activeUser.
+  if (!state.activeUser) {
+    return (
+      <LoginScreen onLogin={handleLogin} />
+    );
+  }
 
   return (
     <AuditLogContext.Provider value={auditCtxValue}>
@@ -184,7 +218,7 @@ export default function App() {
         <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
           {/* Top bar (mobile + persistent global header) */}
           <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur sm:px-6">
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
               <button
                 className="rounded-lg p-2 text-slate-700 hover:bg-slate-100 lg:hidden"
                 onClick={() => setMobileNavOpen(true)}
@@ -222,13 +256,30 @@ export default function App() {
               </div>
             </div>
 
-            <button
-              className="rounded-lg p-2 text-slate-700 hover:bg-slate-100 lg:hidden"
-              onClick={() => setMobileNavOpen(false)}
-              aria-label="Close menu"
-            >
-              <X className="h-5 w-5" />
-            </button>
+            <div className="flex flex-1 items-center justify-end gap-2">
+              <span className="hidden truncate text-right text-sm text-slate-600 sm:block">
+                Logged in:{' '}
+                <span className="font-semibold text-slate-900">
+                  {state.activeUser.name} ({state.activeUser.role})
+                </span>
+              </span>
+              <button
+                onClick={handleLogout}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-slate-300/50"
+                aria-label="Log Out"
+              >
+                <LogOut className="h-4 w-4" />
+                <span className="hidden sm:inline">Log Out</span>
+              </button>
+
+              <button
+                className="rounded-lg p-2 text-slate-700 hover:bg-slate-100 lg:hidden"
+                onClick={() => setMobileNavOpen(false)}
+                aria-label="Close menu"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
           </header>
 
           <div className="flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:px-8">
@@ -238,11 +289,13 @@ export default function App() {
                   onSelectPatient={handleSelectPatient}
                   resolvedIds={resolvedIds}
                   auditLog={state.auditLog}
+                  activeUser={state.activeUser}
                 />
               )}
               {state.view === 'patient' && (
                 <PatientDetail
                   patientId={state.activePatientId}
+                  activeUser={state.activeUser}
                   onBack={handleBack}
                   onResolve={handleResolve}
                   isResolved={

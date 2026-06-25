@@ -60,7 +60,7 @@ function ModalityIcon({ modality, className = 'h-4 w-4' }) {
 
 const SEVERITY_ORDER = { RED: 0, YELLOW: 1, GREY: 2, GREEN: 3 };
 
-export default function Dashboard({ onSelectPatient, resolvedIds, auditLog }) {
+export default function Dashboard({ onSelectPatient, resolvedIds, auditLog, activeUser }) {
   const [query, setQuery] = useState('');
   const [severityFilter, setSeverityFilter] = useState('ALL');
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -121,8 +121,8 @@ export default function Dashboard({ onSelectPatient, resolvedIds, auditLog }) {
     logEvent({
       type: 'EXTERNAL_UPLOAD',
       severity: 'SUCCESS',
-      actor: 'External Gateway',
-      message: `External ${payload.kind} ingested from ${payload.facility} for Patient ${payload.patientId} (${payload.patientName}).`,
+      actor: `${activeUser.name} (${activeUser.role})`,
+      message: `External ${payload.kind} ingested by ${activeUser.name} (${activeUser.role}) from ${payload.facility} for Patient ${payload.patientId} (${payload.patientName}).`,
     });
     setShowUploadModal(false);
   };
